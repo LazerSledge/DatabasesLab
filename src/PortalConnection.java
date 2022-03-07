@@ -3,19 +3,11 @@ import java.sql.*; // JDBC stuff.
 import java.util.Properties;
 
 public class PortalConnection {
-
-    // Set this to e.g. "portal" if you have created a database named portal
-    // Leave it blank to use the default database of your database user
     static final String DBNAME = "portal";
     // For connecting to the portal database on your local machine
     static final String DATABASE = "jdbc:postgresql://localhost/"+DBNAME;
     static final String USERNAME = "postgres";
     static final String PASSWORD = "postgres";
-
-    // For connecting to the chalmers database server (from inside chalmers)
-    // static final String DATABASE = "jdbc:postgresql://brage.ita.chalmers.se/";
-    // static final String USERNAME = "tda357_nnn";
-    // static final String PASSWORD = "yourPasswordGoesHere";
 
 
     // This is the JDBC connection object you will be using in your methods.
@@ -38,11 +30,13 @@ public class PortalConnection {
     // Register a student on a course, returns a tiny JSON document (as a String)
     public String register(String student, String courseCode){
       try(PreparedStatement st = conn.prepareStatement(
-          "INSERT INTO Registrations VALUES (student, courseCode);"
+          "INSERT INTO Registrations VALUES (?,?);"
       );){
-          return "{\"success\":false, \"error\":\"\"}";
-      
-      //Here's a bit of useful code, use it or delete it
+          st.setString(1,student);
+          st.setString(2,courseCode);
+
+          st.executeUpdate();
+          return "{\"success\":true}";
       } catch (SQLException e) {
           return "{\"success\":false, \"error\":\""+getError(e)+"\"}";
        }
@@ -50,27 +44,42 @@ public class PortalConnection {
 
     // Unregister a student from a course, returns a tiny JSON document (as a String)
     public String unregister(String student, String courseCode){
-      return "{\"success\":false, \"error\":\"Unregistration is not implemented yet :(\"}";
+        try(PreparedStatement st = conn.prepareStatement(
+                "DELETE FROM Registrations WHERE Registrations.student = ? AND Registrations.course = ?;"
+        );){
+            st.setString(1,student);
+            st.setString(2,courseCode);
+            int i = st.executeUpdate();
+            System.out.println(i);
+            if ( i == 0 ) {
+                return "{\"success\":false, \"error\":\"Student not registered to course}";
+            } else {
+                return "{\"success\":true}";
+            }
+
+        } catch (SQLException e) {
+            return "{\"success\":false, \"error\":\""+getError(e)+"\"}";
+        }
     }
 
     // Return a JSON document containing lots of information about a student, it should validate against the schema found in information_schema.json
-    public String getInfo(String student) throws SQLException{
+    public String getInfo(String student) throws SQLException{ 
         
         try(PreparedStatement st = conn.prepareStatement(
             // replace this with something more useful
-            "SELECT jsonb_build_object('student',idnr,'name',name) AS jsondata FROM BasicInformation WHERE idnr=?"
+            "SELECT jsonb_build_object('student',student,'name',name,) AS jsondata FROM PathToGraduation WHERE idnr=?"
             );){
-            
             st.setString(1, student);
-            
+
             ResultSet rs = st.executeQuery();
-            
             if(rs.next())
               return rs.getString("jsondata");
             else
               return "{\"student\":\"does not exist :(\"}"; 
             
-        } 
+        } catch (SQLException e) {
+            return "{\"success\":false, \"error\":\""+getError(e)+"\"}";
+        }
     }
 
     // This is a hack to turn an SQLException into a JSON string error message. No need to change.
